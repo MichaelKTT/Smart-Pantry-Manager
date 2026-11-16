@@ -1,83 +1,112 @@
 # Smart Pantry Manager
 
-Smart Pantry Manager is an Android app that helps users keep track of leftover ingredients and decide what to cook. It suggests a recipe only when the pantry contains **every required ingredient in the right quantity**.
+A small Android application for tracking leftover ingredients and finding recipes that use **only what is actually available, in enough quantity**.
 
-The app was built with **Java and XML** in **Android Studio** for the **Mobile App Development 700** assignment at Richfield.
+Written in **Java with XML layouts**, using Android's `Activity`, `Intent`, `ListView`, custom `BaseAdapter`, `SQLiteOpenHelper` and `SharedPreferences`. The interface uses midnight purple, lavender and pale green.
 
-## Features
+## Open and run
 
-- Add, view, edit and delete pantry ingredients.
-- Record each ingredient’s quantity, unit and optional expiry date.
-- Get suggestions from 20 recipes stored on the device.
-- Open a recipe to see its ingredients, quantities and preparation steps.
-- Turn expiry highlights on or off in Settings.
-- Load a sample pantry to try the app with demonstration data.
+1. Extract the entire ZIP. Open the **SmartPantryManager** folder in **Android Studio**: choose **Open**, not New Project. Select the folder containing `settings.gradle`.
+2. Let Android Studio sync Gradle. Internet is needed for the first development setup, but the installed app works offline.
+3. In SDK Manager, install **Android SDK Platform 35** and **Android SDK Build-Tools 34.0.0** if requested.
+4. Select **JDK 17** as the Gradle JDK. Search Android Studio settings for **Gradle JDK**. Use or download a JDK 17 if necessary. The pinned project uses Android Gradle Plugin **8.7.3** and Gradle **8.9**.
+5. Choose an emulator or phone running **Android 8.0 / API 26 or higher**. An API 35 emulator is a suitable first choice.
+6. Select the **app** run configuration and press the green **Run** triangle.
+7. On first launch, recipes are seeded automatically; the pantry starts empty. Add an ingredient, or open **Settings → Load sample pantry**, confirm, and then open **Recipes**. The sample has six complete matches.
 
-## App screens
+There is no API key, Firebase project, web server, Google Maps or location permission to configure. You do not need to create an Empty Activity template or paste these files into another project.
 
-| Screen | What it does |
-| --- | --- |
-| Pantry | Displays saved ingredients and shows how many recipes can be made. |
-| Add/Edit Ingredient | Lets the user enter or update an ingredient and validates the form before saving. |
-| Suggested Recipes | Lists recipes that can be made with the current pantry. |
-| Recipe Details | Shows the full ingredient list, preparation steps and estimated time. |
-| Settings | Controls expiry highlights and lets the user load a sample pantry. |
+### Install the supplied APK
 
-## How to run the app
+`Installable_APK/SmartPantryManager-debug.apk` is next to this project folder in the download. You can drag it onto a running Android emulator, or copy it to an Android 8.0+ phone and open it. It is a debug build for local testing.
 
-1. Download or clone the project. If you downloaded a ZIP, extract it first.
-2. Open **Android Studio → File → Open** and select the **SmartPantryManager** folder containing `settings.gradle` and `app/`.
-3. Wait for Gradle to sync. Install **Android SDK Platform 35** and **Build-Tools 34.0.0** if prompted. Select **JDK 17** in the Gradle settings if needed.
-4. Select an emulator or connected Android device running **Android 8.0 (API 26)** or newer.
-5. Select the **app** run configuration and click **Run ▶**.
+The supplied APK and a new Android Studio build use different debug signing keys. If an installation reports a signature conflict, uninstall the earlier build before installing the other one. **Uninstalling removes that installation's pantry data.**
 
-On first launch, the app loads 20 recipes and starts with an empty pantry. To try it quickly, open **Settings → Load sample pantry**, confirm, and open **Recipes**. The sample contains **9 ingredient batches** and produces **6 matching recipes**.
+### Build from a terminal
+
+With JDK 17 and an Android SDK configured:
+
+```powershell
+# Windows, inside the project folder
+.\gradlew.bat assembleDebug
+```
+
+```bash
+# macOS / Linux
+sh gradlew assembleDebug
+```
+
+Android Studio normally writes your SDK location to a local `local.properties`; that machine-specific file is deliberately excluded. If using only a terminal, set `ANDROID_HOME` to your Android SDK directory or create that local file yourself. The normal Gradle APK output is `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Screens
+
+| Screen | Java class | XML layout |
+| --- | --- | --- |
+| Pantry list, edit/delete controls and summary | `ui/PantryActivity.java` | `activity_pantry.xml` |
+| Add or edit a pantry batch | `ui/IngredientFormActivity.java` | `activity_ingredient_form.xml` |
+| Complete recipe matches only | `ui/SuggestedRecipesActivity.java` | `activity_suggested_recipes.xml` |
+| Ingredients, quantities and method | `ui/RecipeDetailActivity.java` | `activity_recipe_detail.xml` |
+| In-app expiry highlights, optional sample, reset | `ui/SettingsActivity.java` | `activity_settings.xml` |
+
+All Java classes are under `app/src/main/java/com/smartpantry/app/`. XML layouts are under `app/src/main/res/layout/`.
 
 ## Why SQLite?
 
-SQLite suits this project because a personal pantry is a small collection of records that can be stored directly on the device. The user can add, read, update and delete ingredients offline, and the records remain available after closing and reopening the app.
+The pantry is personal, small and useful offline. SQLite stores data on the device, needs no backend or credentials, and clearly demonstrates all four CRUD operations. The three tables separate pantry batches, recipes and recipe requirements. `SQLiteOpenHelper.onCreate()` creates the schema and seeds **20 recipes once**. Closing and reopening the app does not recreate the database. Uninstalling or clearing Android app storage does remove it.
 
-`DatabaseHelper.java` uses `SQLiteOpenHelper` to create three tables:
+The settings switch is stored separately in `SharedPreferences`; the actual pantry and recipes are in SQLite.
 
-| Table | What it stores |
-| --- | --- |
-| `pantry_items` | The user’s ingredients, quantities, units and optional expiry dates. |
-| `recipes` | Recipe names, descriptions, cooking times and preparation steps. |
-| `recipe_ingredients` | The ingredients, quantities and units required by each recipe. |
+## The strict rule
 
-The database loads the recipe collection from `recipes.json` when it is first created. The expiry highlighting preference is saved separately using `SharedPreferences`.
+`logic/RecipeMatcher.java` is the central business logic:
 
-## How recipe matching works
+1. Exclude expired pantry batches and invalid quantities.
+2. Normalize names using an explicit small alias dictionary, including tomato/tomatoes and egg/eggs.
+3. Convert compatible units to a common base: kg → g; l, tsp, tbsp and cup → ml.
+4. Add compatible batches of the same ingredient together.
+5. Add repeated requirements together as well, so the same stock cannot be counted twice.
+6. Reject the recipe immediately if any required ingredient is missing or short.
 
-`RecipeMatcher.java` compares each recipe’s requirements with the available pantry stock:
+No ingredient is assumed free: even water, salt and oil are explicit where needed. There is no partial-match list mixed into suggestions.
 
-1. Standardise common ingredient names. For example, `tomato` and `tomatoes` match.
-2. Convert compatible units. For example, `0.5 kg` of rice becomes `500 g`.
-3. Combine quantities from separate batches of the same ingredient in compatible units. Skip batches whose expiry date has passed.
-4. Check every required ingredient. If one ingredient is missing or there is too little of it, leave the recipe out of the suggestions.
+### Deliberate matching boundaries
 
-For example, **Tomato rice** needs **150 g of rice** and **2 tomatoes**, along with water, oil and salt. With the sample pantry loaded, changing Tomatoes from **2 pieces to 1** removes Tomato rice from the suggested list. Restoring **2 pieces** makes it appear again.
+- A metric cup is **250 ml**, tablespoon **15 ml**, teaspoon **5 ml**. These volume units are for liquids; use g/kg for dry ingredients.
+- Grams and millilitres are not interchangeable. Pieces and slices are separate. If a recipe asks for two tomatoes in pieces, entering only a weight does not qualify it. This avoids guessing food weights or densities.
+- Dry chickpeas do not qualify for a cooked-chickpea recipe. Use **cooked chickpeas** or **canned chickpeas**, in grams. For garlic, use **garlic cloves**, in pieces. For tuna, use **canned tuna**, in grams.
+- Aliases are intentionally limited. Fresh, dried and powdered foods are not broadly treated as equivalent.
+- A batch dated today remains available; a date before today is excluded. This is a stock-tracking convention, not a food-safety assessment.
+- Recipes qualify **independently**. Six suggestions mean six alternative choices; the pantry may not support cooking all six consecutively. After cooking, edit quantities yourself. The app does not deduct stock automatically.
+- Expiry highlighting happens while using the app; no background notification service is included.
 
-## Project structure
+## Tests and verification
 
-| Location | Purpose |
-| --- | --- |
-| `app/src/main/java/com/smartpantry/app/ui/` | Screen behaviour, navigation and adapters that display list rows. |
-| `app/src/main/java/com/smartpantry/app/data/` | SQLite setup, recipe loading and pantry database operations. |
-| `app/src/main/java/com/smartpantry/app/logic/` | Recipe matching, name normalisation, unit conversion and expiry checks. |
-| `app/src/main/java/com/smartpantry/app/model/` | Java classes for pantry ingredients, recipes and recipe requirements. |
-| `app/src/main/res/layout/` | XML layouts for screens and list rows. |
-| `app/src/main/assets/recipes.json` | The 20 recipes loaded into SQLite. |
-
-## Testing
-
-To test the app manually, add an ingredient and confirm it appears in the pantry. Edit its quantity, close and reopen the app, and check that the edited value is still there. Then delete the ingredient and confirm it disappears. Use the Tomato rice example above to test the recipe matching rule.
-
-To run the automated matching tests, open a terminal in the project folder with **Python 3** and **JDK 17** available:
+From this project folder, with Python 3 and JDK 17 on PATH:
 
 ```bash
 python tests/run_tests.py
 ```
 
-The tests cover missing ingredients, insufficient quantities, unit conversions, common ingredient names, expired batches and all 20 recipes.
+This compiles and executes the **actual production Java matching code**. It checks every recipe against exact quantities, each missing ingredient and each insufficient quantity, plus aliases, conversions, duplicate batches, repeated requirements, expiry and invalid data. See `docs/TESTING.md` for the device checklist.
 
+The supplied debug APK was built from these Java/XML sources with Android SDK 35 and official Android build tools, then signature-verified. The sandbox could not give Gradle's JVM network access, so **a complete Gradle sync/build and lint run were not completed here**. Java compilation, resource linking, DEX generation, alignment and APK signing did succeed. No emulator or physical-device run was available here; complete the device checklist in Android Studio before treating this as submission evidence.
+
+## Understand and complete the assignment
+
+- `docs/LEARNING_GUIDE.md`: what each file does and which concepts to explain.
+- `docs/TESTING.md`: reproducible checks, including SQLite persistence and strict matching.
+- `docs/SUBMISSION_CHECKLIST.md`: GitHub, 5–7 minute narrated video, genuine screenshots, report, and the under-50 MB submission ZIP.
+- `docs/REPORT_WORKBOOK.md`: report structure to complete with your own details and real app evidence.
+
+This is an implementation to study, adapt and understand. Follow your institution's rules for acknowledging assistance and sources. Your own development history, narration, screenshots, reflections and originality declaration must be genuine. This download is a source-and-demo package, **not your completed Moodle submission**.
+
+## Official documentation consulted
+
+- Android Developers (2024) *Android Gradle Plugin 8.7 release notes*. Available at: https://developer.android.com/build/releases/agp-8-7-0-release-notes (Accessed: 2 November 2026).
+- Android Developers (n.d.) *SQLiteOpenHelper*. Available at: https://developer.android.com/reference/android/database/sqlite/SQLiteOpenHelper (Accessed: 2 November 2026).
+- Android Developers (n.d.) *ListView*. Available at: https://developer.android.com/reference/android/widget/ListView (Accessed: 2 November 2026).
+- Android Developers (n.d.) *The activity lifecycle*. Available at: https://developer.android.com/guide/components/activities/activity-lifecycle (Accessed: 2 November 2026).
+- Android Developers (n.d.) *Intents and intent filters*. Available at: https://developer.android.com/guide/components/intents-filters (Accessed: 2 November 2026).
+- Android Developers (n.d.) *Behavior changes: Apps targeting Android 15 or higher*. Available at: https://developer.android.com/about/versions/15/behavior-changes-15 (Accessed: 2 November 2026).
+
+The included Gradle wrapper files originate from Gradle v8.9.0 and retain their Apache 2.0 license notices. See `THIRD_PARTY_NOTICES.md`.

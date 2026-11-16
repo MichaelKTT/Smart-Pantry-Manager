@@ -1,0 +1,12 @@
+<resources>
+    <color name="background">#151020</color>
+    <color name="surface">#241C33</color>
+    <color name="surface_light">#302640</color>
+    <color name="accent">#C3E2A3</color>
+    <color name="accent_pressed">#A9CC87</color>
+    <color name="lavender">#D0B6F2</color>
+    <color name="text_primary">#F6F1FC</color>
+    <color name="text_secondary">#C4B8D3</color>
+    <color name="danger">#FFB4B4</color>
+    <color name="divider">#443652</color>
+</resources>
